@@ -104,7 +104,8 @@ model execution required) are:
 ```sh
 node --experimental-strip-types --test \
   tools/local-clipper/tests/preflight.test.mjs \
-  tools/local-clipper/tests/local-clipping-safety.test.mjs
+  tools/local-clipper/tests/local-clipping-safety.test.mjs \
+  tools/local-clipper/tests/local-clipping-outcome.test.mjs
 ```
 
 ## Fast, offline safety regression tests
