@@ -89,6 +89,23 @@ Useful options:
 - --no-burn-subtitles (keeps SRT only)
 - --language pt (default; specify the correct source language)
 
+## Technical validation of rendered clips
+
+Run after rendering each MP4:
+
+    python tools/local-clipper/verify_output.py --input "C:\Videos\cortes-teste\clip_01.mp4"
+
+The command checks container streams, codec, dimensions, duration and the first
+20 seconds of audio. It exits nonzero for technical failures. This **does not
+verify the meaning of the cut**. Every generated clip remains marked
+PENDING_HUMAN_REVIEW in its JSON manifest, even if all technical checks pass.
+There is no automatic publishing in this pilot.
+
+Verified in the development environment against three already-rendered clips
+from a real long source: all three passed technical checks. Six standalone
+technical-QA unit tests passed. Automatic speech-to-text, semantic selection,
+Postiz UI integration and publishing remain **unverified**.
+
 ## Acceptance conditions
 
 1. A real video is readable by ffprobe, and outputs play with audio.
