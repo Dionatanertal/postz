@@ -243,12 +243,18 @@ export class LocalClippingService {
       );
     } finally {
       if (!committed && stagedPaths.length) {
+        // A failed/retried worker can upload files without committing them.
+        // Only delete files proven unreferenced: the DB transaction might
+        // have succeeded even if the response was lost.
         const current = await this.repository
-          .getLocalClippingSource(id)
+          .getLocalClipping(job.organizationId, id)
           .catch(() => null);
-        if (current?.status === 'failed') {
+        if (current) {
+          const referenced = new Set(current.clips.map((clip) => clip.path));
           await Promise.all(
-            stagedPaths.map((path) => storage.removeFile(path).catch(() => {}))
+            stagedPaths
+              .filter((path) => !referenced.has(path))
+              .map((path) => storage.removeFile(path).catch(() => {}))
           );
         }
       }
@@ -320,10 +326,18 @@ export class LocalClippingService {
         'Continue this draft with its original channel.'
       );
     }
+    const existing = await this.posts.findLocalClipDraft(org, postId);
+    if (existing?.deletedAt) {
+      throw new ConflictException(
+        'The linked post was deleted. It cannot be recreated automatically.'
+      );
+    }
     if (clip.draftedAt) {
+      if (!existing) {
+        throw new ConflictException('The linked post is no longer available.');
+      }
       return { postId };
     }
-    const existing = await this.posts.findLocalClipDraft(org, postId);
     if (existing) {
       if (existing.integrationId !== integrationId) {
         throw new ConflictException(
