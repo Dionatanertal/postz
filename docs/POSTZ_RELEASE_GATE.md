@@ -66,6 +66,32 @@
 - Nenhuma GitHub Action foi iniciada por esta rodada, conforme consulta
   à lista de execuções para a branch.
 
+## Integridade e limitação de disco adicionadas (16/11/2026)
+
+- Na falha ou repetição do processamento, os MP4s enviados e **não
+  referenciados no banco** são eliminados do armazenamento de mídia. O
+  código consulta as referências persistidas antes de excluir para preservar
+  os arquivos de transações que possam ter sido concluídas apesar de falha
+  no retorno ao worker.
+- O caminho temporário da clipagem pode ser configurado com
+  `LOCAL_CLIPPING_TMP_DIR` (diretório preexistente, gravável e montado).
+  O worker recusa um novo trabalho se o filesystem temporário não tiver
+  **2 GiB disponíveis**.
+- Antes de gravar os cortes finais no armazenamento permanente, o worker
+  soma o tamanho real dos arquivos gerados e exige espaço suficiente para
+  copiá-los e ainda preservar **1 GiB livre** no volume de mídia.
+- Um post vinculado excluído não pode ser interpretado como um rascunho
+  válido, e a tela explica por que outro rascunho não é criado
+  automaticamente.
+- São verificações de proteção pontuais, **não um limite total para
+  Docker, cache de build ou vídeos já armazenados**. Ainda não foram
+  executados build, testes automatizados ou homologação após essas
+  alterações. Devem constar na bateria de testes em ambiente isolado.
+- Para o teste de regressão, exercitar espaço temporário insuficiente,
+  espaço de mídia insuficiente, commit de clipagem bem-sucedido com
+  perda de resposta, upload órfão, post vinculado excluído e tentativa de
+  duplicar o rascunho original.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
