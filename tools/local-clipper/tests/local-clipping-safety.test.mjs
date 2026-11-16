@@ -4,6 +4,8 @@ import {
   canReserveDiskSpace,
   MIN_SCRATCH_FREE_BYTES,
   MIN_MEDIA_FREE_BYTES,
+  MAX_CLIPPING_SOURCE_BYTES,
+  isValidLocalClippingSourceSize,
   unreferencedClipPaths,
 } from '../../../libraries/nestjs-libraries/src/database/prisma/clipping/local.clipping.safety.ts';
 
@@ -43,4 +45,13 @@ test('all staging uploads are eligible when none was committed', () => {
   assert.deepEqual(unreferencedClipPaths(['/uploads/one.mp4', '/uploads/two.mp4'], []), [
     '/uploads/one.mp4', '/uploads/two.mp4'
   ]);
+});
+
+
+test('only non-empty source MP4s up to 1 GiB are accepted before scheduling', () => {
+  assert.equal(isValidLocalClippingSourceSize(1), true);
+  assert.equal(isValidLocalClippingSourceSize(MAX_CLIPPING_SOURCE_BYTES), true);
+  for (const invalid of [0, -1, MAX_CLIPPING_SOURCE_BYTES + 1, NaN, Infinity, 1.5]) {
+    assert.equal(isValidLocalClippingSourceSize(invalid), false);
+  }
 });
