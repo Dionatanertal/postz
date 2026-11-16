@@ -84,10 +84,15 @@ export class LocalClippingService {
   }
 
   async start(org: string, body: LocalClippingDto) {
-    const client = this.temporal.client.getRawClient();
-    if (!localClippingEnabled() || !client) {
+    if (!localClippingEnabled()) {
       throw new ServiceUnavailableException(
         'Local clipping is not configured.'
+      );
+    }
+    const client = this.temporal.client.getRawClient();
+    if (!client) {
+      throw new ServiceUnavailableException(
+        'Local clipping worker is unavailable.'
       );
     }
     const media = await this.media.getMediaStatus(org, body.mediaId);
@@ -128,6 +133,9 @@ export class LocalClippingService {
         });
       } catch {
         await this.fail(job.id, 'Could not start the local clipping worker.');
+        throw new ServiceUnavailableException(
+          'Could not start the local clipping worker. Try again later.'
+        );
       }
       return job;
     });
