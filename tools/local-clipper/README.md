@@ -4,6 +4,22 @@ This folder is a **proof of concept**, not a replacement for Postiz's existing
 YouTube/RunPod clipping flow. It does not change the main Postiz app, social
 connections, database, Docker configuration, scheduling, or running services.
 
+## Triage first (before making clips)
+
+Run this no-cost inspection to avoid unnecessarily cutting a Reel that may
+already be finished:
+
+    python tools/local-clipper/intake.py --input "C:\\Videos\\video.mp4"
+
+A `short_vertical_review` result means **review the original first**, not
+that the system detected captions, edit quality, or an approved CTA. Keep the
+original intact. `clip_source_review` suggests a longer or horizontal source
+that may benefit from clipping. Either decision still requires context review.
+
+Run the triage unit tests:
+
+    python -m unittest discover -s tools/local-clipper/tests -p 'test_intake.py' -v
+
 ## Purpose
 
 Take an **authorized local video** (MP4, MOV, MKV or WebM), transcribe spoken
