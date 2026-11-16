@@ -875,7 +875,9 @@ export class PostsRepository {
   findLocalClipDraft(orgId: string, id: string) {
     return this._post.model.post.findFirst({
       where: { id, organizationId: orgId },
-      select: { id: true, integrationId: true },
+      // Keep deletedAt visible: a deleted post must never be reported as a
+      // usable linked draft or silently recreated with the same ID.
+      select: { id: true, integrationId: true, deletedAt: true },
     });
   }
 
