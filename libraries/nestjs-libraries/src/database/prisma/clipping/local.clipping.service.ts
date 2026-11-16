@@ -228,6 +228,16 @@ export class LocalClippingService {
         return;
       }
       const rendered = await processor.render();
+      // Render files live in scratch storage; uploading them must not exhaust
+      // the persistent media volume, which also holds the user's originals.
+      const mediaStats = await statfs(process.env.UPLOAD_DIRECTORY!);
+      if (mediaStats.bavail * mediaStats.bsize < 1024 * 1024 * 1024) {
+        await this.fail(
+          id,
+          'Local clipping needs at least 1 GiB free in media storage before saving clips.'
+        );
+        return;
+      }
       const clips: Parameters<ClippingRepository['finishLocalClipping']>[1] =
         [];
       for (const { file, ...clip } of rendered) {
