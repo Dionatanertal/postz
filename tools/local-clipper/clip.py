@@ -239,6 +239,7 @@ def render(
         "-map", "0:v:0", "-map", "0:a:0?",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
         "-movflags", "+faststart", str(destination),
     ]
     subprocess.run(command, cwd=destination.parent, check=True)
