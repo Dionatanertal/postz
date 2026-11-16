@@ -6,6 +6,7 @@ import {
   MIN_MEDIA_FREE_BYTES,
   MAX_CLIPPING_SOURCE_BYTES,
   isValidLocalClippingSourceSize,
+  hasCompletedLocalClipping,
   unreferencedClipPaths,
 } from '../../../libraries/nestjs-libraries/src/database/prisma/clipping/local.clipping.safety.ts';
 
@@ -54,4 +55,22 @@ test('only non-empty source MP4s up to 1 GiB are accepted before scheduling', ()
   for (const invalid of [0, -1, MAX_CLIPPING_SOURCE_BYTES + 1, NaN, Infinity, 1.5]) {
     assert.equal(isValidLocalClippingSourceSize(invalid), false);
   }
+});
+
+test('transport failure does not override a persisted completed clipping', () => {
+  assert.equal(
+    hasCompletedLocalClipping({
+      status: 'completed',
+      clips: [{ path: '/uploads/clip1.mp4' }, { path: '/uploads/clip2.mp4' }],
+    }),
+    true
+  );
+});
+
+test('failed, incomplete, or missing clipping records must not be reported as completed', () => {
+  assert.equal(hasCompletedLocalClipping(null), false);
+  assert.equal(hasCompletedLocalClipping({ status: 'failed', clips: [{ path: '/uploads/a.mp4' }] }), false);
+  assert.equal(hasCompletedLocalClipping({ status: 'completed', clips: [] }), false);
+  assert.equal(hasCompletedLocalClipping({ status: 'completed', clips: [{ path: null }] }), false);
+  assert.equal(hasCompletedLocalClipping({ status: 'completed', clips: [{ path: '' }] }), false);
 });
