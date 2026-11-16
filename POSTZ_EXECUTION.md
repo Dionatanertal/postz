@@ -35,8 +35,10 @@ clipadora pronta nem de homologação comercial.
 
 Fechar a **seleção semântica a partir da transcrição** de um trecho real do
 vídeo longo; medir se a seleção conserva frases e contexto e testar o render
-automaticamente. Depois integrar ao painel existente do Postiz com aprovação
-humana. Reutilizar funcionalidades nativas antes de escrever serviços próprios.
+automaticamente. O Postiz já possui `OpenaiService.pickClips` para selecionar
+segmentos completos por IA. **Reutilizar esse serviço nativo**, com controle
+de custos e autorização, em vez de duplicar a inteligência em outro produto.
+Depois integrar ao painel existente do Postiz com aprovação humana.
 
 O código já contém um fluxo de clipagem original baseado em YouTube/RunPod,
 Deepgram, R2 e OpenAI. O piloto local é isolado justamente para não romper
