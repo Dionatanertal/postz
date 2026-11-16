@@ -161,6 +161,40 @@
   `FAILED` no histórico e conferir a consistência do status no Prisma.
   Não houve GitHub Action, build Docker ou publicação.
 
+## Intake de mídia e validação remota manual (16/11/2026)
+
+- O serviço de clipagem confirma a presença do arquivo físico
+  da biblioteca e seu tamanho antes de criar uma tarefa no Temporal.
+  Arquivos ausentes, vazios ou acima do limite de **1 GiB** não geram
+  processamento. A interface também bloqueia o upload de arquivos
+  vazios ou acima desse limite antes da transferência.
+- A função pura `isValidLocalClippingSourceSize` e sua regressão
+  foram adicionadas ao conjunto de testes de proteção. O serviço faz
+  ainda `stat` real do caminho local; este acesso ao filesystem
+  permanece pendente de teste integrado com um volume montado.
+- Os arquivos `local.clipping.safety.ts` e
+  `local-clipping-safety.test.mjs` foram executados em ambiente
+  isolado, com correspondência exata dos hashes Git
+  `27836e1e94bb49547b516bb1848cc2f7cd1fa2a4` e
+  `af32fe21f2de9dfcd9fb7e810d7e0644081aa482`.
+  **7 testes aprovados**, TypeScript isolado válido.
+- O conjunto completo de segurança, pré-instalação e propagação
+  de erros do Temporal foi executado com Node.js 22.16.0,
+  `node --experimental-strip-types --test`:
+  **17 testes aprovados, 0 falhas**. Os arquivos de preflight e
+  outcome usados tinham hashes Git idênticos aos objetos remotos.
+- Criado o workflow `.github/workflows/postz-offline-qa.yml`,
+  **somente `workflow_dispatch`**, com `contents: read`,
+  `timeout-minutes: 6` e execução apenas de testes offline.
+  O arquivo YAML foi analisado em ambiente isolado; hash Git
+  `8fdd6f2f7e3d2e26b01697aaf4c5b9c12099c422`.
+  **Não foi disparada nenhuma GitHub Action.**
+- O fluxo manual não instala dependências do POSTZ, não usa Docker,
+  não baixa modelos e não modifica esquemas, dados ou canais sociais.
+  **Não comprova** compilação do monorepo, integração real do Temporal,
+  migrações Prisma, integridade de vídeos grandes ou readiness da
+  imagem final. Tais portas de liberação continuam abertas.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
