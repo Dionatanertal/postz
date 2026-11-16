@@ -1,5 +1,6 @@
 import { proxyActivities } from '@temporalio/workflow';
 import type { LocalClippingActivity } from '@gitroom/orchestrator/activities/local.clipping.activity';
+import { runClippingWithFailureReport } from './local.clipping.outcome';
 
 const { processLocalClipping } = proxyActivities<LocalClippingActivity>({
   startToCloseTimeout: '30 minutes',
@@ -19,9 +20,8 @@ export async function localClippingWorkflowV1({
   clippingId: string;
   language: string;
 }) {
-  try {
-    await processLocalClipping(clippingId, language);
-  } catch {
-    await failLocalClipping(clippingId);
-  }
+  await runClippingWithFailureReport(
+    () => processLocalClipping(clippingId, language),
+    () => failLocalClipping(clippingId)
+  );
 }
