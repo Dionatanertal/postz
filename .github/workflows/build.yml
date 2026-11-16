@@ -2,7 +2,11 @@
 name: Build
 
 on:
+  # Preserve automatic builds on main, but avoid running a full monorepo build
+  # for each low-cost POSTZ feature-branch edit.
   push:
+    branches:
+      - main
   merge_group:
   pull_request:
 
