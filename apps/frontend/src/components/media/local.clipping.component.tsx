@@ -177,7 +177,11 @@ function ClipReview({
             )}
           </div>
         ) : (
-          <p className="text-sm">O post vinculado está indisponível.</p>
+          <p className="text-sm">
+            O post vinculado não está disponível. Se foi excluído, este
+            corte não cria automaticamente outro rascunho, para evitar
+            duplicidade.
+          </p>
         )
       ) : (
         <>
