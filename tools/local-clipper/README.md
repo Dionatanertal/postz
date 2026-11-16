@@ -74,6 +74,21 @@ through the original workflow and routes.
 The standalone commands below are available for offline testing of the same
 media pipeline and for repeating the earlier editorial pilot.
 
+## Fast, offline safety regression tests
+
+The local clipping worker uses pure guard functions to reject invalid disk
+capacity, preserve temporary-volume headroom and protect committed media paths
+when cleaning up interrupted attempts. These checks can be tested without
+Docker, PostgreSQL, FFmpeg, AI models, paid APIs or a video input:
+
+```sh
+node --experimental-strip-types --test tools/local-clipper/tests/local-clipping-safety.test.mjs
+```
+
+Requires Node.js 22+ with type stripping support. This verifies six guard
+cases. It does **not** replace an orchestrator build, Temporal integration
+test, database migration test or real-media rendering test.
+
 ## Triage first (before making clips)
 
 Run this no-cost inspection to avoid unnecessarily cutting a Reel that may
