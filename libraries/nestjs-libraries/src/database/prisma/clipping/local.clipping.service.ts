@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -173,11 +173,23 @@ export class LocalClippingService {
       return;
     }
     const storage = new LocalStorage(process.env.UPLOAD_DIRECTORY!);
-    const directory = await mkdtemp(join(tmpdir(), 'postiz-clipping-'));
-    const processor = new LocalClippingProcessor(directory, signal);
+    const scratchRoot = process.env.LOCAL_CLIPPING_TMP_DIR || tmpdir();
     const stagedPaths: string[] = [];
+    let directory: string | undefined;
     let committed = false;
     try {
+      // An excerpt, its transcription and the rendered MP4s all coexist here.
+      // Refuse work if the scratch filesystem is already critically full.
+      const { bavail, bsize } = await statfs(scratchRoot);
+      if (bavail * bsize < 2 * 1024 * 1024 * 1024) {
+        await this.fail(
+          id,
+          'Local clipping needs at least 2 GiB of free scratch space. Choose a different temporary volume.'
+        );
+        return;
+      }
+      directory = await mkdtemp(join(scratchRoot, 'postiz-clipping-'));
+      const processor = new LocalClippingProcessor(directory, signal);
       const start = job.localStartSeconds!;
       const duration = await processor.prepare(
         storage.pathForUploadUrl(job.url),
@@ -258,7 +270,9 @@ export class LocalClippingService {
           );
         }
       }
-      await rm(directory, { recursive: true, force: true }).catch(() => {});
+      if (directory) {
+        await rm(directory, { recursive: true, force: true }).catch(() => {});
+      }
     }
   }
 
