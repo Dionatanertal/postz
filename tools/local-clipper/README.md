@@ -42,6 +42,19 @@ Set these values in the API and worker runtime configuration:
     LOCAL_CLIPPING_WHISPER_MODEL=/absolute/path/to/ggml-small-q5_1.bin
     LOCAL_CLIPPING_LLM_MODEL=/absolute/path/to/instruct-model.gguf
     LOCAL_CLIPPING_PYTHON=python3
+    # Optional: a dedicated mounted scratch directory with sufficient capacity
+    LOCAL_CLIPPING_TMP_DIR=/mnt/clipping-scratch
+
+The worker refuses to start a clipping job when its scratch filesystem has
+less than **2 GiB free**. With no `LOCAL_CLIPPING_TMP_DIR`, it uses the
+operating system's temporary directory, which can consume Docker's internal
+disk. For a dedicated scratch location, provision a writable, capacity-limited
+directory on a **separate mounted volume** and give the API/worker access to
+it. The configured directory must already exist. Temporary excerpts and
+transcriptions are removed after processing; clips selected for review remain
+in media storage. Do not point scratch at the host Windows `C:` drive when
+the Docker data disk there is already low on space. This protection applies
+to clipping jobs, **not Docker image builds**: control build cache separately.
 
 The worker needs Python 3.10+, FFmpeg with the subtitles filter and libx264,
 ffprobe, `whisper-cli` from [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
