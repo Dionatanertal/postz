@@ -109,6 +109,12 @@ requires one real sample video.
 
 - The picker uses speech segments and straightforward editorial cues, **not**
   a trained virality model. Humans should select/edit the final cuts.
+- A long video can take substantial CPU time to transcribe locally. Start with
+  one short excerpt to validate quality before running hours of material.
+- Rendered clips include FFmpeg loudness normalization to help with quiet audio;
+  review for background-noise amplification and adjust if needed.
+- Selecting portions from images or audio level alone does NOT validate their
+  meaning. The end-to-end intelligent clipping test requires a real transcript.
 - Sentence-level transcript timing makes subtitle timing approximate; later
   versions may add forced word alignment.
 - FFmpeg uses CPU by default. Processing 200–300 videos at once is not the
