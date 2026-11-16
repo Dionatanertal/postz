@@ -207,6 +207,32 @@
   migrações Prisma, integridade de vídeos grandes ou readiness da
   imagem final. Tais portas de liberação continuam abertas.
 
+## Commit perdido e revisão da migração (16/11/2026)
+
+- O serviço de clipagem agora reconcilia um possível erro de transporte após
+  `finishLocalClipping` com o estado e as referências persistidas no banco.
+  Só considera o trabalho concluído quando existe registro `completed` com
+  pelo menos um corte e todos os caminhos de vídeo presentes. Caso contrário,
+  preserva o comportamento de falha. Os arquivos temporários que não estejam
+  referenciados continuam elegíveis à limpeza segura.
+- O módulo puro de segurança passou **9/9 testes Node.js 22.16.0** em
+  ambiente isolado e na checagem TypeScript 5.8.3 sem emissão de arquivos.
+  Hashes Git dos arquivos **exatamente testados**:
+  `local.clipping.safety.ts`: `3c616c7f4308facd0ed478abf4b1b8b29454cd1f`;
+  `local-clipping-safety.test.mjs`: `356bb587e1fe03a3d2d864c49a80e6c9b704e189`.
+  O serviço NestJS completo e o Temporal em execução **não foram testados**
+  com esse cenário.
+- A comparação literal de `schema.prisma` com a branch `main` encontrou
+  **exatamente três campos opcionais novos**:
+  `Clipping.localStartSeconds Int?`,
+  `ClippingClip.reviewState String?` e
+  `ClippingClip.draftIntegrationId String?`. Os modelos Post, Media e
+  Organization permaneceram idênticos.
+- O arquivo `docs/POSTZ_PRISMA_MIGRATION_PLAN.md` registra a checagem
+  anterior/posterior, SQL aditivo de referência e critérios de restauração.
+  **Não executamos migração nem lemos o esquema efetivo do banco principal.**
+  A avaliação é estática, não uma autorização de deploy.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
