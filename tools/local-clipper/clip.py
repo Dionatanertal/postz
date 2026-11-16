@@ -282,8 +282,13 @@ def process(args: argparse.Namespace) -> dict:
         srt = output / f"{name}.srt"
         mp4 = output / f"{name}.mp4"
         write_srt(clip, srt)
+        technical_qa = None
         if not args.dry_run:
             render(source, mp4, clip, srt, args.layout, burn_subtitles)
+            # Keep output checks independent from semantic/editorial acceptance.
+            # The CLI script directory is on sys.path during normal execution.
+            from verify_output import inspect_media
+            technical_qa = inspect_media(mp4)
         manifest["clips"].append({
             "file": str(mp4) if not args.dry_run else None,
             "subtitles": str(srt),
@@ -291,6 +296,9 @@ def process(args: argparse.Namespace) -> dict:
             "duration": round(clip.end - clip.start, 3),
             "heuristic_score": clip.score, "text": clip.text,
             "burned_subtitles": burn_subtitles and not args.dry_run,
+            "technical_qa": technical_qa,
+            "editorial_approval": "PENDING_HUMAN_REVIEW",
+            "ready_to_publish": False,
         })
     (output / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
