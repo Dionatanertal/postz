@@ -316,6 +316,14 @@ export function LocalClipping({
       setError('Escolha um arquivo MP4.');
       return;
     }
+    if (
+      !libraryVideo &&
+      file instanceof File &&
+      (file.size === 0 || file.size > 1024 ** 3)
+    ) {
+      setError('Escolha um vídeo MP4 não vazio de até 1 GB.');
+      return;
+    }
     setSubmitting(true);
     setError('');
     try {
