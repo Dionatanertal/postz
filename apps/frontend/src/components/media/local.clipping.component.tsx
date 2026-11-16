@@ -7,6 +7,7 @@ import { Button } from '@gitroom/react/form/button';
 import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
 import { MediaBox } from '@gitroom/frontend/components/media/media.component';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { LocalClippingResults } from '@gitroom/frontend/components/media/local.clipping.results.component';
 
 type JobSummary = { id: string; title: string; status: string };
 type Clip = {
@@ -159,16 +160,21 @@ function ClipReview({
       {clip.content && <p className="text-sm">{clip.content}</p>}
       {clip.draftedAt ? (
         clip.post ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm">{labels[clip.post.state]}</span>
-            <a
-              className="underline"
-              href={`/launches?postId=${encodeURIComponent(clip.post.id)}`}
-            >
-              {clip.post.state === 'PUBLISHED'
-                ? 'Ver resultados no calendário'
-                : 'Abrir post no calendário'}
-            </a>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm">{labels[clip.post.state]}</span>
+              <a
+                className="underline"
+                href={`/launches?postId=${encodeURIComponent(clip.post.id)}`}
+              >
+                {clip.post.state === 'PUBLISHED'
+                  ? 'Ver resultados no calendário'
+                  : 'Abrir post no calendário'}
+              </a>
+            </div>
+            {clip.post.state === 'PUBLISHED' && (
+              <LocalClippingResults key={clip.post.id} postId={clip.post.id} />
+            )}
           </div>
         ) : (
           <p className="text-sm">O post vinculado está indisponível.</p>
