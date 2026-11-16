@@ -92,6 +92,28 @@
   perda de resposta, upload órfão, post vinculado excluído e tentativa de
   duplicar o rascunho original.
 
+## Regressão sem Docker — executada em ambiente isolado (16/11/2026)
+
+- As verificações de reserva de capacidade e de preservação de uploads
+  persistidos foram extraídas para
+  `libraries/nestjs-libraries/src/database/prisma/clipping/local.clipping.safety.ts`
+  e integradas ao serviço de clipagem.
+- Criados seis testes offline em
+  `tools/local-clipper/tests/local-clipping-safety.test.mjs`.
+  Execução com Node.js 22.16.0 e `--experimental-strip-types`: **6 testes
+  passaram, 0 falharam**. O helper também passou na checagem `tsc --noEmit
+  --skipLibCheck --target es2022 --module commonjs --strict`.
+- A equivalência dos dois arquivos testados com os conteúdos versionados
+  no GitHub foi verificada pelo hash de blob Git, respectivamente
+  `da28fb06358221ac894744ed7462830e3a7e8585` e
+  `051cbd503305daabb4d4b125abc1a568aed939f7`.
+- Os testes verificam limites de espaço, dados inválidos, retenção de
+  arquivos já comprometidos no banco e remoção apenas de caminhos órfãos.
+  **Não testam o serviço NestJS, persistência Prisma, FFmpeg, integração
+  Temporal nem o build completo**. Essas pendências permanecem no aceite.
+- A execução ocorreu fora do computador do usuário, sem Docker nem
+  qualquer chamada de serviço paga ou publicação.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
