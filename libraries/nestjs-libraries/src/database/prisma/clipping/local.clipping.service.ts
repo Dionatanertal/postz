@@ -32,6 +32,7 @@ import {
   canReserveDiskSpace,
   MIN_MEDIA_FREE_BYTES,
   MIN_SCRATCH_FREE_BYTES,
+  isValidLocalClippingSourceSize,
   unreferencedClipPaths,
 } from './local.clipping.safety';
 
@@ -109,13 +110,27 @@ export class LocalClippingService {
     ) {
       throw new BadRequestException('Upload an MP4 to start clipping.');
     }
+    let sourcePath: string;
     try {
-      new LocalStorage(process.env.UPLOAD_DIRECTORY!).pathForUploadUrl(
-        media.path
-      );
+      sourcePath = new LocalStorage(
+        process.env.UPLOAD_DIRECTORY!
+      ).pathForUploadUrl(media.path);
     } catch {
       throw new BadRequestException(
         'The source must be stored in the local media library.'
+      );
+    }
+    let source;
+    try {
+      source = await stat(sourcePath);
+    } catch {
+      throw new BadRequestException(
+        'The source video is missing from local storage. Upload it again.'
+      );
+    }
+    if (!source.isFile() || !isValidLocalClippingSourceSize(source.size)) {
+      throw new BadRequestException(
+        'Choose a non-empty MP4 video of up to 1 GiB.'
       );
     }
 
