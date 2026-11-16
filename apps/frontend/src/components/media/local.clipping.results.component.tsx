@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 
 type Metric = {
@@ -52,9 +52,11 @@ export function LocalClippingResults({ postId }: { postId: string }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Results | null>(null);
   const [error, setError] = useState('');
+  // An older request must not overwrite the results for a newer period.
+  const latestRequest = useRef(0);
 
   async function load(days: Period) {
-    if (loading) return;
+    const requestId = ++latestRequest.current;
     setLoading(true);
     setError('');
     try {
@@ -95,19 +97,25 @@ export function LocalClippingResults({ postId }: { postId: string }) {
               Number.isFinite(Number((item as LinkClick).clicks))
           )
         : [];
-      setResults({
-        metrics,
-        clicks,
-        missingRelease: analyticsBody?.missing === true,
-        partial: analytics.status === 'rejected' || links.status === 'rejected',
-      });
+      if (requestId === latestRequest.current) {
+        setResults({
+          metrics,
+          clicks,
+          missingRelease: analyticsBody?.missing === true,
+          partial: analytics.status === 'rejected' || links.status === 'rejected',
+        });
+      }
     } catch (err) {
-      setResults(null);
-      setError(
-        err instanceof Error ? err.message : 'Erro ao consultar os resultados.'
-      );
+      if (requestId === latestRequest.current) {
+        setResults(null);
+        setError(
+          err instanceof Error ? err.message : 'Erro ao consultar os resultados.'
+        );
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+      }
     }
   }
 
