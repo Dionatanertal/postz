@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { runClippingWithFailureReport } from '../../../apps/orchestrator/src/workflows/local.clipping.outcome.ts';
 
 test('successful processing completes without reporting failure', async () => {
-  const calls: string[] = [];
+  const calls = [];
   await runClippingWithFailureReport(
     async () => { calls.push('process'); },
     async () => { calls.push('fail'); }
@@ -12,14 +12,14 @@ test('successful processing completes without reporting failure', async () => {
 });
 
 test('failed activity is reported and still rejects the Temporal workflow', async () => {
-  const calls: string[] = [];
+  const calls = [];
   const error = new Error('media processing failed');
   await assert.rejects(
     runClippingWithFailureReport(
       async () => { calls.push('process'); throw error; },
       async () => { calls.push('fail'); }
     ),
-    (err: unknown) => err === error
+    (err) => err === error
   );
   assert.deepEqual(calls, ['process', 'fail']);
 });
