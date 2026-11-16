@@ -16,7 +16,11 @@ normalized audio. Clips must pass technical checks before appearing for
 review. Approve or reject each clip in the panel. For an approved clip,
 select an existing channel and choose **Criar rascunho**. The draft appears
 in the regular Postiz calendar. Its publish controls remain in the existing
-editor.
+editor. Once a linked post is **published**, its clip card offers
+**Ver resultados deste corte**. On operator request, it reads that same
+post's provider-reported analytics (7, 30 or 90 days) and existing Postiz
+short-link clicks. There is no background polling or invented conversion
+attribution. If a provider does not return metrics, the panel says so.
 
 ### Runtime configuration
 
