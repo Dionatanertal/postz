@@ -188,7 +188,17 @@
   `timeout-minutes: 6` e execução apenas de testes offline.
   O arquivo YAML foi analisado em ambiente isolado; hash Git
   `8fdd6f2f7e3d2e26b01697aaf4c5b9c12099c422`.
-  **Não foi disparada nenhuma GitHub Action.**
+  **O workflow manual de QA não foi acionado.** Contudo, o workflow
+  `Build` preexistente disparou duas vezes automaticamente por `push`
+  nesta branch. A execução
+  [43928619406](https://github.com/Dionatanertal/postz/actions/runs/43928619406)
+  concluiu `success` em `280ded2`: dependências instaladas e
+  `pnpm run build` aprovado. A outra execução foi iniciada para
+  `1aebed8`, com conclusão ainda não confirmada neste registro.
+  Para evitar novos custos não planejados, o `.github/workflows/build.yml`
+  **na branch isolada** foi alterado para limitar eventos automáticos
+  de `push` à branch `main`; o workflow de QA continua apenas manual.
+  A alteração não modifica a `main`.
 - O fluxo manual não instala dependências do POSTZ, não usa Docker,
   não baixa modelos e não modifica esquemas, dados ou canais sociais.
   **Não comprova** compilação do monorepo, integração real do Temporal,
