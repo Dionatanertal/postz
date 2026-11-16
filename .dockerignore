@@ -21,3 +21,44 @@ dist
 .git
 .github
 reports
+
+# POSTZ: do not package workstation state, private settings, videos or local
+# models into a release image. Runtime media and models are mounted separately.
+# Keep these rules even when building from a development checkout.
+.env
+.env.*
+**/.env
+**/.env.*
+**/.cache
+**/.cache/**
+**/__pycache__
+**/__pycache__/**
+**/.pytest_cache
+**/.pytest_cache/**
+.pnpm-store
+.pnpm-store/**
+tmp
+tmp/**
+**/tmp/**
+*.vhdx
+**/*.vhdx
+**/*.gguf
+**/*.ggml
+**/ggml-*.bin
+**/*.safetensors
+**/*.onnx
+**/*.mp4
+**/*.mov
+**/*.mkv
+**/*.webm
+**/*.srt
+**/*.wav
+**/*.mp3
+docker-compose*.yaml
+docker-compose*.yml
+playwright-report
+playwright-report/**
+test-results
+test-results/**
+coverage
+coverage/**
