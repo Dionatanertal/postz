@@ -32,6 +32,7 @@ import {
   canReserveDiskSpace,
   MIN_MEDIA_FREE_BYTES,
   MIN_SCRATCH_FREE_BYTES,
+  hasCompletedLocalClipping,
   isValidLocalClippingSourceSize,
   unreferencedClipPaths,
 } from './local.clipping.safety';
@@ -296,6 +297,15 @@ export class LocalClippingService {
         throw new Error('Local clipping could not be committed.');
       }
     } catch {
+      // A DB commit may succeed while its response to the worker is lost.
+      // Re-read the persisted result rather than marking completed clips as
+      // failed. The finally block still removes unreferenced staging uploads.
+      const persisted = await this.repository
+        .getLocalClipping(job.organizationId, id)
+        .catch(() => null);
+      if (hasCompletedLocalClipping(persisted)) {
+        return;
+      }
       this.logger.warn(
         `Local clipping command or persistence failed for ${id}`
       );
