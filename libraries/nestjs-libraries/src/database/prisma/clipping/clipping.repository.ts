@@ -38,6 +38,7 @@ export class ClippingRepository {
     return this._clipping.model.clipping.findMany({
       where: {
         organizationId: org,
+        localStartSeconds: null,
         deletedAt: null,
         status: {
           notIn: ['completed', 'failed'],
@@ -55,6 +56,7 @@ export class ClippingRepository {
     return this._clipping.model.clipping.count({
       where: {
         organizationId: org,
+        localStartSeconds: null,
         createdAt: {
           gte: since,
         },
@@ -66,6 +68,7 @@ export class ClippingRepository {
     return this._clipping.model.clipping.findFirst({
       where: {
         id,
+        localStartSeconds: null,
         deletedAt: null,
       },
       include: {
@@ -83,6 +86,7 @@ export class ClippingRepository {
       where: {
         id,
         organizationId: org,
+        localStartSeconds: null,
         deletedAt: null,
       },
       select: {
@@ -122,6 +126,7 @@ export class ClippingRepository {
       where: {
         id,
         organizationId: org,
+        localStartSeconds: null,
         deletedAt: null,
       },
       select: {
@@ -151,6 +156,7 @@ export class ClippingRepository {
     const pageNum = Math.max(+page || 1, 1) - 1;
     const where = {
       organizationId: org,
+      localStartSeconds: null,
       deletedAt: null as null,
     };
 
@@ -300,6 +306,182 @@ export class ClippingRepository {
         id: true,
         status: true,
       },
+    });
+  }
+
+  createLocalClipping(org: string, url: string, title: string, startSeconds: number) {
+    return this._clipping.model.clipping.create({
+      data: {
+        organizationId: org,
+        url,
+        title,
+        localStartSeconds: startSeconds,
+        status: 'analysing',
+        maxClips: 3,
+        integrations: '[]',
+      },
+      select: { id: true },
+    });
+  }
+
+  async failStaleLocalClippings(org: string, updatedBefore: Date) {
+    await this._clipping.model.clipping.updateMany({
+      where: {
+        organizationId: org,
+        localStartSeconds: { not: null },
+        status: { notIn: ['completed', 'failed'] },
+        updatedAt: { lt: updatedBefore },
+        deletedAt: null,
+      },
+      data: { status: 'failed', error: 'Local clipping timed out.' },
+    });
+  }
+
+  getActiveLocalClipping(org: string) {
+    return this._clipping.model.clipping.findFirst({
+      where: {
+        organizationId: org,
+        localStartSeconds: { not: null },
+        status: { notIn: ['completed', 'failed'] },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+  }
+
+  listLocalClippings(org: string) {
+    return this._clipping.model.clipping.findMany({
+      where: { organizationId: org, localStartSeconds: { not: null }, deletedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, title: true, status: true },
+    });
+  }
+
+  getLocalClipping(org: string, id: string) {
+    return this._clipping.model.clipping.findFirst({
+      where: { id, organizationId: org, localStartSeconds: { not: null }, deletedAt: null },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        error: true,
+        clips: {
+          orderBy: { start: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            start: true,
+            end: true,
+            path: true,
+            reviewState: true,
+            draftIntegrationId: true,
+            draftedAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  getLocalClippingSource(id: string) {
+    return this._clipping.model.clipping.findFirst({
+      where: { id, localStartSeconds: { not: null }, deletedAt: null },
+      select: { organizationId: true, url: true, title: true, localStartSeconds: true, status: true },
+    });
+  }
+
+  async updateLocalClipping(
+    id: string,
+    data: { status: string; duration?: number; error?: string }
+  ) {
+    const { count } = await this._clipping.model.clipping.updateMany({
+      where: {
+        id,
+        localStartSeconds: { not: null },
+        status: { notIn: ['completed', 'failed'] },
+        deletedAt: null,
+      },
+      data,
+    });
+    return count === 1;
+  }
+
+  finishLocalClipping(
+    id: string,
+    clips: { title: string; content: string; start: number; end: number; path: string }[]
+  ) {
+    return this._transaction.model.$transaction(async (tx) => {
+      const { count } = await tx.clipping.updateMany({
+        where: { id, status: 'rendering', localStartSeconds: { not: null }, deletedAt: null },
+        data: { status: 'completed' },
+      });
+      if (count !== 1) {
+        return false;
+      }
+      await tx.clippingClip.createMany({
+        data: clips.map((clip) => ({
+          ...clip,
+          clippingId: id,
+          status: 'completed',
+          reviewState: 'pending',
+        })),
+      });
+      return true;
+    });
+  }
+
+  private localClipWhere(org: string, clippingId: string, id: string) {
+    return {
+      id,
+      clippingId,
+      status: 'completed',
+      clipping: { organizationId: org, localStartSeconds: { not: null }, deletedAt: null },
+    };
+  }
+
+  reviewLocalClip(org: string, clippingId: string, id: string, decision: 'approved' | 'rejected') {
+    return this._clippingClip.model.clippingClip.updateMany({
+      where: {
+        ...this.localClipWhere(org, clippingId, id),
+        draftIntegrationId: null,
+        draftedAt: null,
+      },
+      data: { reviewState: decision },
+    });
+  }
+
+  reserveLocalClipDraft(org: string, clippingId: string, id: string, integrationId: string) {
+    return this._clippingClip.model.clippingClip.updateMany({
+      where: {
+        ...this.localClipWhere(org, clippingId, id),
+        reviewState: 'approved',
+        draftIntegrationId: null,
+        draftedAt: null,
+      },
+      data: { draftIntegrationId: integrationId },
+    });
+  }
+
+  markLocalClipDrafted(org: string, clippingId: string, id: string, integrationId: string) {
+    return this._clippingClip.model.clippingClip.updateMany({
+      where: {
+        ...this.localClipWhere(org, clippingId, id),
+        draftIntegrationId: integrationId,
+        draftedAt: null,
+      },
+      data: { draftedAt: new Date() },
+    });
+  }
+
+  releaseLocalClipDraft(org: string, clippingId: string, id: string, integrationId: string) {
+    return this._clippingClip.model.clippingClip.updateMany({
+      where: {
+        ...this.localClipWhere(org, clippingId, id),
+        draftIntegrationId: integrationId,
+        draftedAt: null,
+      },
+      data: { draftIntegrationId: null },
     });
   }
 }

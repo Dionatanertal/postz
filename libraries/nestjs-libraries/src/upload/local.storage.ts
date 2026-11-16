@@ -142,17 +142,13 @@ export class LocalStorage implements IUploadProvider {
   // stored media name or path, so only a file inside the upload directory is
   // ever deleted: resolve() collapses any `..` segments before the comparison
   async removeFile(filePath: string): Promise<void> {
-    const publicPrefix = process.env.FRONTEND_URL + '/uploads';
-    const base = resolve(String(this.uploadDirectory));
-    const localPath = resolve(
+    const publicPrefix = process.env.FRONTEND_URL + '/uploads/';
+    const localPath = this.resolveUploadPath(
       filePath.startsWith(publicPrefix)
-        ? this.uploadDirectory + filePath.slice(publicPrefix.length)
-        : filePath
+        ? filePath.slice(publicPrefix.length)
+        : filePath,
+      filePath.startsWith(publicPrefix)
     );
-    if (!localPath.startsWith(base + sep)) {
-      throw new Error('Unsafe file path');
-    }
-    // Logic to remove the file from the filesystem goes here
     return new Promise((resolve, reject) => {
       unlink(localPath, (err) => {
         if (err) {
@@ -162,5 +158,24 @@ export class LocalStorage implements IUploadProvider {
         }
       });
     });
+  }
+
+  pathForUploadUrl(url: string) {
+    const prefix = `${process.env.FRONTEND_URL}/uploads/`;
+    if (!url.startsWith(prefix)) {
+      throw new Error('Not an upload URL');
+    }
+    return this.resolveUploadPath(url.slice(prefix.length), true);
+  }
+
+  private resolveUploadPath(path: string, relativeToUploads: boolean) {
+    const base = resolve(String(this.uploadDirectory));
+    const localPath = relativeToUploads
+      ? resolve(base, '.' + sep + path)
+      : resolve(path);
+    if (!localPath.startsWith(base + sep)) {
+      throw new Error('Unsafe file path');
+    }
+    return localPath;
   }
 }

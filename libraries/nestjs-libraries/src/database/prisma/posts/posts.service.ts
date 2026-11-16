@@ -1153,7 +1153,8 @@ export class PostsService {
     orgId: string,
     body: CreatePostDto,
     creationMethod: CreationMethod,
-    keepGroup = false
+    keepGroup = false,
+    fixedDraftIds = false
   ): Promise<any[]> {
     const postList = [];
     const batchId = uuidv4();
@@ -1213,7 +1214,8 @@ export class PostsService {
         creationMethod,
         body.inter,
         keepGroup,
-        batchId
+        batchId,
+        fixedDraftIds
       );
 
       if (!posts?.length) {
@@ -1242,6 +1244,14 @@ export class PostsService {
     }
 
     return postList;
+  }
+
+  findLocalClipDraft(orgId: string, id: string) {
+    return this._postRepository.findLocalClipDraft(orgId, id);
+  }
+
+  getLocalClipPosts(orgId: string, ids: string[]) {
+    return this._postRepository.getLocalClipPosts(orgId, ids);
   }
 
   // Update ONLY the provider settings of a not-yet-published post (scheduled or

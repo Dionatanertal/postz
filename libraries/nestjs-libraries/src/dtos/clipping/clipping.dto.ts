@@ -33,3 +33,26 @@ export class ClippingDto {
   @IsIn(['crop', 'blur'])
   fit?: 'crop' | 'blur';
 }
+
+export class LocalClippingDto {
+  @IsString()
+  mediaId: string;
+
+  @IsInt()
+  @Min(0)
+  @Max(10799)
+  startSeconds: number;
+
+  @IsIn(['pt', 'en', 'es'])
+  language: 'pt' | 'en' | 'es';
+}
+
+export class ReviewClippingDto {
+  @IsIn(['approved', 'rejected'])
+  decision: 'approved' | 'rejected';
+}
+
+export class DraftClippingDto {
+  @IsString()
+  integrationId: string;
+}

@@ -333,11 +333,13 @@ export const CalendarWeekProvider: FC<{
         setListPage(0);
       }
 
+      const postId = new URL(window.location.href).searchParams.get('postId');
       const path = [
         `startDate=${newFilters.startDate}`,
         `endDate=${newFilters.endDate}`,
         `display=${newFilters.display}`,
         newFilters.customer ? `customer=${newFilters.customer}` : ``,
+        postId ? `postId=${encodeURIComponent(postId)}` : ``,
       ].filter((f) => f);
       window.history.replaceState(null, '', `/launches?${path.join('&')}`);
     },

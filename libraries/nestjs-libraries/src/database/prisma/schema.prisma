@@ -303,6 +303,7 @@ model Clipping {
   fit            String         @default("blur")
   integrations   String
   creditsId      String?
+  localStartSeconds Int?
   deletedAt      DateTime?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -327,6 +328,8 @@ model ClippingClip {
   path       String?
   thumbnail  String?
   draftedAt  DateTime?
+  reviewState String?
+  draftIntegrationId String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   clipping   Clipping  @relation(fields: [clippingId], references: [id])

@@ -681,7 +681,8 @@ export class PostsRepository {
     keepGroup = false,
     // Shared by the posts saved together for several channels, so opening one
     // of them in the editor brings the others.
-    batchId?: string
+    batchId?: string,
+    fixedDraftIds = false
   ) {
     const posts: Post[] = [];
     const uuid = uuidv4();
@@ -758,12 +759,15 @@ export class PostsRepository {
         },
       });
 
+      const create = updateData('create');
       posts.push(
-        await this._post.model.post.upsert({
+        fixedDraftIds && state === 'draft' && value.id
+          ? await this._post.model.post.create({ data: { id: value.id, ...create } })
+          : await this._post.model.post.upsert({
           where: {
             id: value.id || uuidv4(),
           },
-          create: { ...updateData('create') },
+          create,
           update: {
             ...updateData('update'),
             lastMessage: {
@@ -866,6 +870,20 @@ export class PostsRepository {
     }
 
     return { previousPost, posts };
+  }
+
+  findLocalClipDraft(orgId: string, id: string) {
+    return this._post.model.post.findFirst({
+      where: { id, organizationId: orgId },
+      select: { id: true, integrationId: true },
+    });
+  }
+
+  getLocalClipPosts(orgId: string, ids: string[]) {
+    return this._post.model.post.findMany({
+      where: { id: { in: ids }, organizationId: orgId, parentPostId: null, deletedAt: null },
+      select: { id: true, state: true },
+    });
   }
 
   async submit(id: string, order: string, buyerOrganizationId: string) {

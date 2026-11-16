@@ -1,16 +1,9 @@
 #!/usr/bin/env python3
-"""Local, approval-first clipping pilot for the POSTZ repository.
-
-This tool does not modify the running Postiz app, touch its database, or publish.
-It transcribes local audio with faster-whisper (optional dependency), picks
-promising speech passages using transparent heuristics, and renders vertical
-MP4 files using FFmpeg. A transcript JSON can be supplied for offline tests.
-
-No performance/virality prediction is implied by the heuristic score.
-"""
+"""Transcribe local video and render vertical cuts for editorial review."""
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -19,6 +12,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 HOOKS = (
     "como", "por que", "porque", "erro", "atenção", "nunca", "você sabia",
@@ -39,8 +33,10 @@ class Segment:
 class Candidate:
     start: float
     end: float
-    score: float
+    score: float | None
     segments: tuple[Segment, ...]
+    title: str | None = None
+    content: str | None = None
 
     @property
     def text(self) -> str:
@@ -50,7 +46,7 @@ class Candidate:
 def require_binary(name: str) -> str:
     result = shutil.which(name)
     if not result:
-        raise RuntimeError(f"{name} is required. Install FFmpeg and add it to PATH.")
+        raise RuntimeError(f"{name} is required on PATH.")
     return result
 
 
@@ -71,7 +67,11 @@ def video_duration(source: Path) -> float:
 
 
 def load_transcript(path: Path) -> list[Segment]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    segments = parse_transcript(json.loads(path.read_text(encoding="utf-8")))
+    return sorted(segments, key=lambda s: (s.start, s.end))
+
+
+def parse_transcript(data: dict | list) -> list[Segment]:
     rows = data.get("segments") if isinstance(data, dict) else data
     if not isinstance(rows, list):
         raise ValueError("Transcript must be an array or {'segments': [...]} object")
@@ -86,7 +86,7 @@ def load_transcript(path: Path) -> list[Segment]:
             raise ValueError("Transcript contains invalid timestamps")
         if text:
             segments.append(Segment(start, end, text))
-    return sorted(segments, key=lambda s: (s.start, s.end))
+    return segments
 
 
 def transcribe(source: Path, model_name: str, language: str | None) -> list[Segment]:
@@ -103,6 +103,69 @@ def transcribe(source: Path, model_name: str, language: str | None) -> list[Segm
         Segment(float(s.start), float(s.end), s.text.strip())
         for s in segments if s.text.strip() and s.end > s.start
     ]
+
+
+def transcribe_with_whisper_cli(
+    source: Path, model_file: Path, language: str, sentence_segments: bool = False
+) -> list[Segment]:
+    model_file = model_file.expanduser().resolve(strict=True)
+    if not model_file.is_file():
+        raise ValueError("--whisper-model-file requires a local GGML model file")
+    whisper = require_binary("whisper-cli")
+    ffmpeg = require_binary("ffmpeg")
+    with TemporaryDirectory() as temporary:
+        audio = Path(temporary) / "speech.wav"
+        output = Path(temporary) / "speech"
+        subprocess.run([
+            ffmpeg, "-nostdin", "-loglevel", "error", "-i", str(source),
+            "-map", "0:a:0", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+            str(audio),
+        ], check=True)
+        subprocess.run([
+            whisper, "-m", str(model_file), "-f", str(audio), "-l", language,
+            "-ng", "-np", "-ojf" if sentence_segments else "-oj", "-of", str(output),
+        ], check=True, stdout=subprocess.DEVNULL)
+        data = json.loads(output.with_suffix(".json").read_text(encoding="utf-8"))
+    try:
+        if sentence_segments:
+            return whisper_sentences(data["transcription"])
+        rows = [
+            {
+                "start": row["offsets"]["from"] / 1000,
+                "end": row["offsets"]["to"] / 1000,
+                "text": row["text"],
+            }
+            for row in data["transcription"]
+            if row["offsets"]["to"] > row["offsets"]["from"]
+        ]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("whisper-cli returned an invalid transcript") from exc
+    return parse_transcript(rows)
+
+
+def whisper_sentences(transcription: list[dict]) -> list[Segment]:
+    sentences = []
+    text = ""
+    start = None
+    end = 0.0
+    for row in transcription:
+        for token in row["tokens"]:
+            word = token["text"]
+            times = token.get("offsets")
+            if not times or not word.strip() or word.startswith("[_"):
+                continue
+            if start is None:
+                start = max(end, times["from"] / 1000)
+            text += word
+            if not re.search(r"[.!?…][\"”')]*$", word.rstrip()):
+                continue
+            stop = times["to"] / 1000
+            if stop > start:
+                sentences.append(Segment(start, stop, text.strip()))
+                end = stop
+            start = None
+            text = ""
+    return sentences
 
 
 def score_passage(parts: tuple[Segment, ...]) -> float:
@@ -163,6 +226,52 @@ def pick_clips(
         if len(winners) >= count:
             break
     return sorted(winners, key=lambda c: c.start)
+
+
+def load_selected_clips(
+    selection_path: Path, transcript_path: Path, duration: float
+) -> list[Candidate]:
+    if duration > 300:
+        raise ValueError("Rendering selected clips requires a video excerpt of up to 300 seconds")
+    selection = json.loads(selection_path.read_text(encoding="utf-8"))
+    raw = transcript_path.read_bytes()
+    transcript_sha256 = hashlib.sha256(raw).hexdigest()
+    if not isinstance(selection, dict) or selection.get("transcriptSha256") != transcript_sha256:
+        raise ValueError("Selection does not match the transcript file")
+    rows = selection.get("clips")
+    transcript = json.loads(raw)
+    if not isinstance(rows, list) or not isinstance(transcript, dict):
+        raise ValueError("Invalid semantic selection or transcript")
+    segments = parse_transcript(transcript)
+    if len(segments) != len(transcript["segments"]) or any(
+        segment.end > duration or (i > 0 and segment.start < segments[i - 1].end)
+        for i, segment in enumerate(segments)
+    ):
+        raise ValueError("Transcript has empty, overlapping or out-of-bounds segments")
+    # Keep the selection order and use only complete transcript ranges.
+    selected = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        first, last = row.get("from"), row.get("to")
+        if type(first) is not int or type(last) is not int:
+            continue
+        if not 0 <= first <= last < len(segments):
+            continue
+        start, end = segments[first].start, segments[last].end
+        if not 20 <= end - start <= 90 or any(
+            start < clip.end and clip.start < end for clip in selected
+        ):
+            continue
+        title, content = row.get("title"), row.get("content")
+        if not isinstance(title, str) or not isinstance(content, str):
+            continue
+        selected.append(Candidate(
+            start, end, None, tuple(segments[first:last + 1]), title, content
+        ))
+        if len(selected) == 3:
+            break
+    return selected
 
 
 def format_srt_time(seconds: float) -> str:
@@ -252,23 +361,54 @@ def process(args: argparse.Namespace) -> dict:
     if source.suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm"):
         raise ValueError("Supported input: MP4, MOV, MKV or WebM")
     duration = video_duration(source)
-    segments = (
-        load_transcript(args.transcript_json)
-        if args.transcript_json else transcribe(source, args.model, args.language)
-    )
-    selected = pick_clips(
-        segments, duration, args.clips, args.min_seconds, args.max_seconds
-    )
+    output = args.output_dir.expanduser().resolve()
+    if args.transcribe_only:
+        if duration > 300:
+            raise ValueError("Provide a video excerpt of up to 300 seconds")
+        segments = (
+            transcribe_with_whisper_cli(
+                source, args.whisper_model_file, args.language, args.sentence_segments
+            )
+            if args.whisper_model_file else transcribe(source, args.model, args.language)
+        )
+        segments = [segment for segment in segments if segment.end <= duration]
+        if not segments:
+            raise RuntimeError("No complete speech segments found in this excerpt")
+        output.mkdir(parents=True, exist_ok=True)
+        transcript_path = output / "transcript.json"
+        with transcript_path.open("x", encoding="utf-8") as target:
+            json.dump({
+                "language": args.language,
+                "segments": [asdict(segment) for segment in segments],
+            }, target, ensure_ascii=False, indent=2)
+        return {"transcript": str(transcript_path), "segments": len(segments)}
+
+    selection_path = args.local_selection or args.semantic_selection or args.editorial_selection
+    if selection_path:
+        selected = load_selected_clips(selection_path, args.transcript_json, duration)
+    else:
+        segments = (
+            load_transcript(args.transcript_json)
+            if args.transcript_json else transcribe(source, args.model, args.language)
+        )
+        selected = pick_clips(
+            segments, duration, args.clips, args.min_seconds, args.max_seconds
+        )
     if not selected:
         raise RuntimeError(
+            "No selected passage matched the transcript and duration limits."
+            if selection_path else
             "No speech passage matched the duration limits. "
             "Review the transcript or lower --min-seconds."
         )
-    output = args.output_dir.expanduser().resolve()
+    if selection_path and output.is_dir() and any(output.iterdir()):
+        raise ValueError("Use a separate empty output directory for the selected clips")
     output.mkdir(parents=True, exist_ok=True)
-    ffmpeg = require_binary("ffmpeg")
-    burn_subtitles = not args.no_burn_subtitles and has_subtitle_filter(ffmpeg)
-    if not args.no_burn_subtitles and not burn_subtitles:
+    burn_subtitles = (
+        not args.dry_run and not args.no_burn_subtitles
+        and has_subtitle_filter(require_binary("ffmpeg"))
+    )
+    if not args.dry_run and not args.no_burn_subtitles and not burn_subtitles:
         print("FFmpeg has no subtitles filter; saving SRT sidecars instead.", file=sys.stderr)
     manifest = {
         "source": str(source), "source_duration_seconds": duration,
@@ -277,6 +417,12 @@ def process(args: argparse.Namespace) -> dict:
         "subtitle_timing": "estimated sentence-level timing",
         "clips": [],
     }
+    if args.semantic_selection:
+        manifest["selection"] = "OpenaiService.pickClips"
+    elif args.local_selection:
+        manifest["selection"] = "local model selection from transcript"
+    elif args.editorial_selection:
+        manifest["selection"] = "editorial selection from transcript"
     for i, clip in enumerate(selected, 1):
         name = f"clip_{i:02d}"
         srt = output / f"{name}.srt"
@@ -300,6 +446,8 @@ def process(args: argparse.Namespace) -> dict:
             "editorial_approval": "PENDING_HUMAN_REVIEW",
             "ready_to_publish": False,
         })
+        if selection_path:
+            manifest["clips"][-1].update(title=clip.title, content=clip.content)
     (output / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -311,8 +459,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True, help="Local source video")
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--transcript-json", type=Path, help="Reuse existing timed transcript")
+    transcription = parser.add_mutually_exclusive_group()
+    transcription.add_argument("--transcript-json", type=Path, help="Reuse existing timed transcript")
+    transcription.add_argument("--transcribe-only", action="store_true",
+                               help="Save a timed transcript from an excerpt of up to five minutes")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--semantic-selection", type=Path,
+                           help="Render suggestions from select-clips.ts for --transcript-json")
+    selection.add_argument("--editorial-selection", type=Path,
+                           help="Render editorially chosen transcript ranges from a local JSON file")
+    selection.add_argument("--local-selection", type=Path,
+                           help="Render ranges chosen by the local model")
     parser.add_argument("--model", default="small", help="faster-whisper model, default small")
+    parser.add_argument("--whisper-model-file", type=Path,
+                        help="Use a local whisper-cli GGML model for --transcribe-only")
+    parser.add_argument("--sentence-segments", action="store_true",
+                        help="Use Whisper token timestamps to preserve sentence boundaries")
     parser.add_argument("--language", default="pt", help="Transcription language")
     parser.add_argument("--clips", type=int, default=3)
     parser.add_argument("--min-seconds", type=float, default=18)
@@ -321,17 +483,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-burn-subtitles", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    selection_path = args.local_selection or args.semantic_selection or args.editorial_selection
+    if selection_path and not args.transcript_json:
+        parser.error("A selection file requires --transcript-json")
+    if args.whisper_model_file and not args.transcribe_only:
+        parser.error("--whisper-model-file requires --transcribe-only")
+    if args.sentence_segments and not args.whisper_model_file:
+        parser.error("--sentence-segments requires --whisper-model-file")
+    if args.transcribe_only and args.dry_run:
+        parser.error("--transcribe-only and --dry-run are mutually exclusive")
     try:
         result = process(args)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"Clipping error: {exc}", file=sys.stderr)
         return 1
+    if args.transcribe_only:
+        print(json.dumps({"status": "ok", **result}, ensure_ascii=False))
+        return 0
+    failed_qa = selection_path is not None and any(
+        clip["technical_qa"] and not clip["technical_qa"]["passed_technical_checks"]
+        for clip in result["clips"]
+    )
     print(json.dumps({
-        "status": "ok", "clips": len(result["clips"]), "manifest": str(
+        "status": "qa_failed" if failed_qa else "ok",
+        "clips": len(result["clips"]), "manifest": str(
             args.output_dir.expanduser().resolve() / "manifest.json"
         )
     }, ensure_ascii=False))
-    return 0
+    return int(failed_qa)
 
 
 if __name__ == "__main__":

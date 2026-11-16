@@ -66,6 +66,8 @@ import {
 } from '@gitroom/frontend/components/layout/set.timezone';
 import { Button } from '@gitroom/react/form/button';
 import { ChevronUpIcon } from '@gitroom/frontend/components/ui/icons';
+import { useSearchParams } from 'next/navigation';
+import useSWR from 'swr';
 
 // Extend dayjs with necessary plugins
 extend(isSameOrAfter);
@@ -758,20 +760,97 @@ export const ListView = () => {
   );
 };
 
+function useLinkedCalendarPost(postId: string) {
+  const fetch = useFetch();
+  return useSWR(
+    `/posts/${encodeURIComponent(postId)}`,
+    async (url: string) => {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Could not load post');
+      }
+      return (await response.json()) as {
+        group: string;
+        posts: (Pick<Post, 'id' | 'state'> & {
+          publishDate: string;
+          deletedAt: string | null;
+        })[];
+      };
+    },
+    {
+      shouldRetryOnError: false,
+      refreshInterval: (data) =>
+        data?.posts?.some(
+          (post) => post.id === postId && post.state === 'QUEUE'
+        )
+          ? 60_000
+          : 0,
+    }
+  );
+}
+
+function LinkedCalendarPost({ postId }: { postId: string }) {
+  const t = useT();
+  const { data, isLoading, error, mutate } = useLinkedCalendarPost(postId);
+  const refresh = useCallback(() => {
+    void mutate();
+  }, [mutate]);
+  const { editPost, openStatistics } = usePostActions(refresh);
+  const post = data?.posts?.find(
+    (item) => item.id === postId && !item.deletedAt
+  );
+  if (isLoading) {
+    return (
+      <p role="status" className="px-4 py-3">
+        {t('loading_post', 'Loading post…')}
+      </p>
+    );
+  }
+  if (error || !post || !data?.group) {
+    return (
+      <p role="status" className="px-4 py-3">
+        {t('post_not_found', 'Post not found')}
+      </p>
+    );
+  }
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-newBorder px-4 py-3">
+      <p className="text-sm">{fromUtc(post.publishDate).format('LLL')}</p>
+      {post.state === 'PUBLISHED' ? (
+        <Button onClick={openStatistics(post.id)}>
+          {t('post_statistics', 'Post Statistics')}
+        </Button>
+      ) : (
+        <Button onClick={editPost({ ...post, group: data.group })}>
+          {post.state === 'DRAFT'
+            ? t('open_linked_draft', 'Open draft')
+            : t('edit_post', 'Edit post')}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export const Calendar = () => {
   const { display } = useCalendar();
-  return (
-    <>
-      {display === 'list' ? (
-        <ListView />
-      ) : display === 'day' ? (
-        <DayView />
-      ) : display === 'week' ? (
-        <WeekView />
-      ) : (
-        <MonthView />
-      )}
-    </>
+  const postId = useSearchParams().get('postId');
+  const view =
+    display === 'list' ? (
+      <ListView />
+    ) : display === 'day' ? (
+      <DayView />
+    ) : display === 'week' ? (
+      <WeekView />
+    ) : (
+      <MonthView />
+    );
+  return postId ? (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <LinkedCalendarPost key={postId} postId={postId} />
+      <div className="flex min-h-0 flex-1">{view}</div>
+    </div>
+  ) : (
+    view
   );
 };
 export const CalendarColumn: FC<{

@@ -1,8 +1,57 @@
 # Local clipping pilot (isolated)
 
-This folder is a **proof of concept**, not a replacement for Postiz's existing
-YouTube/RunPod clipping flow. It does not change the main Postiz app, social
-connections, database, Docker configuration, scheduling, or running services.
+## Clipping in the Postiz media panel
+
+The local mode uses the existing media upload, Temporal worker and draft
+composer. In **Media → Clipagem inteligente**, upload an MP4, enter the
+starting time in seconds and choose the spoken language. The worker analyzes
+up to five minutes from that point and returns up to three cuts. The upload
+uses the media library's 1 GiB limit. A source needs audio and at least 20
+seconds available after the chosen start.
+
+The worker uses Whisper token times to group complete sentences. A local
+llama.cpp model compares eligible transcript ranges and selects candidates.
+FFmpeg produces vertical H.264/AAC clips with burned-in captions and
+normalized audio. Clips must pass technical checks before appearing for
+review. Approve or reject each clip in the panel. For an approved clip,
+select an existing channel and choose **Criar rascunho**. The draft appears
+in the regular Postiz calendar. Its publish controls remain in the existing
+editor.
+
+### Runtime configuration
+
+Apply the additive Prisma schema update to the intended environment before
+running builds from this branch. Existing rows keep null values in the new
+fields. Use the project's existing Prisma schema update procedure. For local
+testing, point it at a disposable database.
+
+Use local media storage and share its existing upload directory between the
+frontend, API and orchestrator. Preview files use the existing local media
+URLs. The media panel only lists the authenticated organization's jobs.
+Treat preview links like other local media links.
+
+Set these values in the API and worker runtime configuration:
+
+    STORAGE_PROVIDER=local
+    LOCAL_CLIPPING_ENABLED=true
+    LOCAL_CLIPPING_SCRIPT=/absolute/path/to/postz/tools/local-clipper/clip.py
+    LOCAL_CLIPPING_WHISPER_MODEL=/absolute/path/to/ggml-small-q5_1.bin
+    LOCAL_CLIPPING_LLM_MODEL=/absolute/path/to/instruct-model.gguf
+    LOCAL_CLIPPING_PYTHON=python3
+
+The worker needs Python 3.10+, FFmpeg with the subtitles filter and libx264,
+ffprobe, `whisper-cli` from [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+and `llama-completion` from [llama.cpp](https://github.com/ggml-org/llama.cpp)
+on PATH. Use a multilingual GGML model for Whisper and an instruction-tuned
+GGUF file with a chat template for the selector. Model files must already be
+present on the worker. The worker launches both CPU tools as subprocesses,
+so there is no model server to operate and no per-video terminal command.
+
+The setting is opt-in. The existing YouTube clipping workflow continues
+through the original workflow and routes.
+
+The standalone commands below are available for offline testing of the same
+media pipeline and for repeating the earlier editorial pilot.
 
 ## Triage first (before making clips)
 
@@ -26,10 +75,9 @@ Take an **authorized local video** (MP4, MOV, MKV or WebM), transcribe spoken
 Portuguese, suggest non-duplicate passages, render vertical MP4 files, and
 produce captions plus a JSON manifest for **human review before publication**.
 
-No social account, OpenAI key, cloud media service, or GitHub Action is required
-for this pilot. The selection heuristic does **not** predict virality or
-commercial performance. Video processing is local, and source files remain
-unchanged.
+The original heuristic mode runs locally without credentials. The optional
+semantic mode sends the timed transcript to Postiz's OpenAI selector. Media
+processing and human review take place locally.
 
 ## Windows setup
 
@@ -89,6 +137,79 @@ Useful options:
 - --no-burn-subtitles (keeps SRT only)
 - --language pt (default; specify the correct source language)
 
+## Semantic selection with the Postiz service
+
+Use a video excerpt with coherent speech and a maximum duration of five
+minutes. Keep that same excerpt for transcription and render. The examples
+use the repo's ignored `tmp` directory so working files stay out of Git.
+
+1. Extract a three-minute passage beginning at an appropriate time in the video.
+   Adjust `-ss` to the intended start. Omit this command if the authorized
+   source is already an excerpt.
+
+       ffmpeg -n -ss 00:10:00 -i "C:\Videos\video.mp4" -t 180 -c:v libx264 -c:a aac "C:\Videos\excerpt.mp4"
+
+2. Transcribe the excerpt with the local Whisper model. Listen to the passage
+   and check the text and timing before submitting it for selection.
+
+       python tools/local-clipper/clip.py --input "C:\Videos\excerpt.mp4" --output-dir tmp/clipping-pilot --transcribe-only
+
+3. With the workspace dependencies installed through pnpm, run the selector
+   only after the operator authorizes sending the timed transcript and the
+   billable OpenAI request. Supply `OPENAI_API_KEY` through the process
+   environment. This step submits up to 24,000 bytes of transcript input
+   (timings and text) and its language to the native selector in one request,
+   with no automatic retries. Preserve `selection.json` for subsequent renders.
+
+       pnpm exec ts-node --project apps/backend/tsconfig.json --transpile-only tools/local-clipper/select-clips.ts tmp/clipping-pilot/transcript.json tmp/clipping-pilot/selection.json --allow-paid-selection
+
+4. Use the same transcript and excerpt with an empty render destination. This
+   step runs locally. The selector can return up to three clips of 20–90
+   seconds. The renderer accepts consecutive whole transcript lines within
+   those limits and rejects overlapping ranges. A changed transcript requires
+   a new selection.
+
+       python tools/local-clipper/clip.py --input "C:\Videos\excerpt.mp4" --output-dir tmp/clipping-pilot/render --transcript-json tmp/clipping-pilot/transcript.json --semantic-selection tmp/clipping-pilot/selection.json
+
+5. Open the MP4, SRT and manifest. Verify that the first and last words are
+   audible, captions match the speech, and each clip makes a complete point on
+   its own. Review the suggested title and post copy against the excerpt.
+   `qa_failed` and exit code 1 indicate a technical failure. Every clip still
+   requires human approval.
+
+## Local transcription and editorial selection
+
+Install or unpack FFmpeg and [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+and make their executables available on PATH for the current terminal. Use a
+local multilingual [GGML model](https://huggingface.co/ggerganov/whisper.cpp)
+such as `ggml-small-q5_1.bin`. After obtaining the binaries and weights these
+steps run offline.
+
+1. Extract a spoken excerpt of up to five minutes using the FFmpeg command in
+   the previous section.
+2. Produce the timed transcript on the local machine.
+
+       python tools/local-clipper/clip.py --input "C:\Videos\excerpt.mp4" --output-dir tmp/clipping-pilot --transcribe-only --whisper-model-file "C:\Tools\ggml-small-q5_1.bin"
+
+3. Review the transcript in order. Mark zero-based inclusive `from` and `to`
+   indices for up to three complete passages of 20–90 seconds, and use the
+   file's SHA-256 in the selection JSON. On PowerShell, compute it with
+   `(Get-FileHash tmp/clipping-pilot/transcript.json).Hash.ToLowerInvariant()`.
+   Replace the example values with those for the excerpt.
+
+       {
+         "transcriptSha256": "<transcript file hash>",
+         "clips": [
+           {"from": 3, "to": 12, "title": "Proposed title", "content": "Draft post"}
+         ]
+       }
+
+4. Save the JSON as `selection.json` and render from the same excerpt. Use an
+   empty output directory. The manifest records the editorial provenance and
+   leaves approval pending.
+
+       python tools/local-clipper/clip.py --input "C:\Videos\excerpt.mp4" --output-dir tmp/clipping-pilot/render --transcript-json tmp/clipping-pilot/transcript.json --editorial-selection tmp/clipping-pilot/selection.json
+
 ## Technical validation of rendered clips
 
 Run after rendering each MP4:
@@ -113,7 +234,8 @@ Postiz UI integration and publishing remain **unverified**.
    sentences or misleading edits.
 3. SRT text faithfully reflects the speaker; human review corrects mistakes.
 4. The original source remains unchanged; nothing is published.
-5. No paid service, token, live channel, or business system is touched.
+5. The semantic request is made only with explicit authorization. The
+   heuristic path runs without credentials or paid services.
 
 Run standard-library unit tests:
 

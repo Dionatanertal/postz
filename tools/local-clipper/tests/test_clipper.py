@@ -5,10 +5,12 @@ No network, AI model, or media rendering is required to run these tests.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 MODULE = Path(__file__).resolve().parents[1] / "clip.py"
 spec = importlib.util.spec_from_file_location("postz_local_clipper", MODULE)
@@ -91,6 +93,79 @@ class TestLocalClipper(unittest.TestCase):
 
     def test_srt_time_handles_long_videos(self):
         self.assertEqual(clipper.format_srt_time(3661.5), "01:01:01,500")
+
+    def test_whisper_sentence_boundaries_cross_raw_segments(self):
+        def token(text, start, end):
+            return {"text": text, "offsets": {"from": start, "to": end}}
+
+        sentences = clipper.whisper_sentences([
+            {"tokens": [token(" Uma frase", 100, 2000), token(" com", 2000, 3000)]},
+            {"tokens": [
+                token(" sentido.", 3000, 6000),
+                {"text": "[_TT_300]"},
+                token(" Outra frase!", 5900, 9000),
+                token(" Um final incompleto", 9500, 11000),
+            ]},
+        ])
+        self.assertEqual(sentences, [
+            clipper.Segment(0.1, 6, "Uma frase com sentido."),
+            clipper.Segment(6, 9, "Outra frase!"),
+        ])
+
+    def test_semantic_dry_run_keeps_whole_transcript_lines_and_requires_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            video = root / "example.mp4"
+            video.touch()
+            transcript = root / "transcript.json"
+            transcript.write_text(json.dumps({"language": "pt", "segments": [
+                {"start": i * 10, "end": (i + 1) * 10, "text": f"Frase {i}."}
+                for i in range(12)
+            ]}), encoding="utf-8")
+            selection = root / "selection.json"
+            selection.write_text(json.dumps({
+                "transcriptSha256": hashlib.sha256(transcript.read_bytes()).hexdigest(),
+                "clips": [
+                    {"from": first, "to": last, "title": "Título", "content": "Texto"}
+                    for first, last in [(0, 0), (0, 9), (2, 4), (3, 5), (-1, 2), (7, 8)]
+                ],
+            }), encoding="utf-8")
+            for flag, provenance in [
+                ("--semantic-selection", "OpenaiService.pickClips"),
+                ("--editorial-selection", "editorial selection from transcript"),
+                ("--local-selection", "local model selection from transcript"),
+            ]:
+                with self.subTest(flag=flag):
+                    output = root / flag[2:]
+                    with patch.object(clipper, "video_duration", return_value=120), patch.object(
+                        clipper, "render"
+                    ) as render:
+                        self.assertEqual(clipper.main([
+                            "--input", str(video), "--output-dir", str(output),
+                            "--transcript-json", str(transcript), flag,
+                            str(selection), "--dry-run",
+                        ]), 0)
+                        render.assert_not_called()
+                    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+                    self.assertEqual(manifest["selection"], provenance)
+            self.assertEqual(
+                [(item["start"], item["end"]) for item in manifest["clips"]],
+                [(20, 50), (70, 90)],
+            )
+            first = manifest["clips"][0]
+            self.assertEqual(first["text"], "Frase 2. Frase 3. Frase 4.")
+            self.assertEqual(first["title"], "Título")
+            self.assertIsNone(first["heuristic_score"])
+            self.assertEqual(first["editorial_approval"], "PENDING_HUMAN_REVIEW")
+            self.assertFalse(first["ready_to_publish"])
+            subtitles = (output / "clip_01.srt").read_text(encoding="utf-8")
+            self.assertIn("00:00:00,000 --> 00:00:10,000\nFrase 2.", subtitles)
+
+            with self.assertRaisesRegex(ValueError, "out-of-bounds"):
+                clipper.load_selected_clips(selection, transcript, 119)
+            transcript.write_bytes(transcript.read_bytes() + b"\n")
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                clipper.load_selected_clips(selection, transcript, 120)
 
 
 if __name__ == "__main__":
