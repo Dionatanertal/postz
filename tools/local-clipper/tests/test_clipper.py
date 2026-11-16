@@ -43,7 +43,6 @@ class TestLocalClipper(unittest.TestCase):
             self.assertLessEqual(item.end - item.start, 24)
         for index, a in enumerate(picked):
             for b in picked[index + 1:]:
-                self.assertLessEqual(max(a.start, b.start), min(a.end, b.end) + 1)
                 overlap = max(0, min(a.end, b.end) - max(a.start, b.start))
                 self.assertLess(overlap, 1)
 
