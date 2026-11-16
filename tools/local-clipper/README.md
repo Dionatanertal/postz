@@ -74,6 +74,39 @@ through the original workflow and routes.
 The standalone commands below are available for offline testing of the same
 media pipeline and for repeating the earlier editorial pilot.
 
+## Check worker prerequisites before building or deploying
+
+The worker needs installed executables, readable local models, writable
+scratch/media directories and enough free space. Use the read-only preflight
+**inside the intended worker runtime** before enabling local clipping:
+
+```sh
+node tools/local-clipper/preflight.mjs
+# Machine-readable report (reports categories, never credential values):
+node tools/local-clipper/preflight.mjs --json
+```
+
+The command verifies the local feature flag, storage mode, clipper Python file,
+Whisper/LLM model files, Python, FFprobe, Whisper CLI, llama-completion,
+FFmpeg subtitle support and H.264/AAC encoders. It checks at least 2 GiB free
+scratch space and 1 GiB free media space. Exit code `0` means the inspected
+requirements passed; `1` means something is missing. It does **not**
+download models, create Docker images, initialize the database, invoke AI
+models, connect to social accounts, or publish content.
+
+This is a **prerequisite check, not runtime homologation**. Execute in the
+actual container or worker environment: running it on a developer machine
+cannot prove the tools and mounted files exist in the final image.
+
+The offline regression tests for this check (no Docker, external network or
+model execution required) are:
+
+```sh
+node --experimental-strip-types --test \
+  tools/local-clipper/tests/preflight.test.mjs \
+  tools/local-clipper/tests/local-clipping-safety.test.mjs
+```
+
 ## Fast, offline safety regression tests
 
 The local clipping worker uses pure guard functions to reject invalid disk
