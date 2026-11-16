@@ -52,6 +52,22 @@ reutilização do material para nova produção**.
   publicação vinculada. O rascunho não disparou consultas de métricas.
   O cenário de publicação sem métricas exibiu o aviso nativo do Postiz.
 
+## Avanço posterior à sincronização local (16/11/2026)
+
+- O cartão de um corte **publicado** ganhou a opção "Ver resultados deste
+  corte", integrada às APIs nativas `/analytics/post/:postId` e
+  `/posts/:postId/statistics`. Exibe indicadores conforme o provedor e
+  cliques de links rastreados, com escolha de 7, 30 ou 90 dias.
+- As consultas são feitas **somente quando o operador abre ou atualiza** os
+  resultados; rascunhos não provocam consulta de estatísticas. A informação
+  permanece vinculada ao mesmo ID do post criado a partir do corte.
+- Sem novo serviço, banco, automação de publicação ou API paga. Cliques não são
+  classificados como leads, reuniões ou vendas.
+- Código gravado e lido novamente no GitHub. **Ainda não houve execução de
+  build TypeScript, teste de navegador ou homologação com conta real para essa
+  melhoria após a sincronização**. Esses testes precisam ocorrer antes de
+  ativar uma nova versão na instalação do usuário.
+
 ## Operação e homologação
 
 - Limites do MVP local: MP4 de até 1 GiB e janela de até cinco minutos por
