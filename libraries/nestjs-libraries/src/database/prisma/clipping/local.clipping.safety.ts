@@ -27,6 +27,24 @@ export function canReserveDiskSpace(
   return bytesToWrite <= freeBytes && freeBytes - bytesToWrite >= minimumRemainingBytes;
 }
 
+/**
+ * A worker can lose the response after the database transaction commits.
+ * Confirm the persisted job has at least one complete clip before treating
+ * that transport error as success. Never trust the transport result alone.
+ */
+export function hasCompletedLocalClipping(
+  job: {
+    status: string;
+    clips: readonly { path: string | null }[];
+  } | null
+): boolean {
+  return (
+    job?.status === 'completed' &&
+    job.clips.length > 0 &&
+    job.clips.every((clip) => typeof clip.path === 'string' && clip.path.length > 0)
+  );
+}
+
 /** Never remove a staging upload that is referenced by committed clips. */
 export function unreferencedClipPaths(
   stagedPaths: readonly string[],
