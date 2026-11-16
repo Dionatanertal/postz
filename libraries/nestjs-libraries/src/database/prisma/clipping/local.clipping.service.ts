@@ -28,6 +28,12 @@ import {
 } from '@gitroom/nestjs-libraries/upload/local.clipping.processor';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import {
+  canReserveDiskSpace,
+  MIN_MEDIA_FREE_BYTES,
+  MIN_SCRATCH_FREE_BYTES,
+  unreferencedClipPaths,
+} from './local.clipping.safety';
 
 const localClipPostId = (clipId: string) => `local_clip_draft_${clipId}`;
 
@@ -181,7 +187,7 @@ export class LocalClippingService {
       // An excerpt, its transcription and the rendered MP4s all coexist here.
       // Refuse work if the scratch filesystem is already critically full.
       const { bavail, bsize } = await statfs(scratchRoot);
-      if (bavail * bsize < 2 * 1024 * 1024 * 1024) {
+      if (!canReserveDiskSpace(bavail * bsize, 0, MIN_SCRATCH_FREE_BYTES)) {
         await this.fail(
           id,
           'Local clipping needs at least 2 GiB of free scratch space. Choose a different temporary volume.'
@@ -234,10 +240,17 @@ export class LocalClippingService {
       const renderedSizes = await Promise.all(
         rendered.map(async (clip) => (await stat(clip.file)).size)
       );
-      const neededBytes =
-        renderedSizes.reduce((total, size) => total + size, 0) +
-        1024 * 1024 * 1024;
-      if (mediaStats.bavail * mediaStats.bsize < neededBytes) {
+      const bytesToWrite = renderedSizes.reduce(
+        (total, size) => total + size,
+        0
+      );
+      if (
+        !canReserveDiskSpace(
+          mediaStats.bavail * mediaStats.bsize,
+          bytesToWrite,
+          MIN_MEDIA_FREE_BYTES
+        )
+      ) {
         await this.fail(
           id,
           'Not enough free media storage to save these clips and preserve 1 GiB of free space.'
@@ -278,11 +291,11 @@ export class LocalClippingService {
           .getLocalClipping(job.organizationId, id)
           .catch(() => null);
         if (current) {
-          const referenced = new Set(current.clips.map((clip) => clip.path));
           await Promise.all(
-            stagedPaths
-              .filter((path) => !referenced.has(path))
-              .map((path) => storage.removeFile(path).catch(() => {}))
+            unreferencedClipPaths(
+              stagedPaths,
+              current.clips.map((clip) => clip.path)
+            ).map((path) => storage.removeFile(path).catch(() => {}))
           );
         }
       }
