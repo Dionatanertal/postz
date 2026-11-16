@@ -168,15 +168,18 @@ export class LocalClippingService {
 
   async process(id: string, language: string, signal?: AbortSignal) {
     const job = await this.repository.getLocalClippingSource(id);
-    if (!job || job.status === 'completed' || job.status === 'failed') {
+    if (!job || job.status === 'completed') {
       return;
+    }
+    if (job.status === 'failed') {
+      throw new Error('Local clipping was previously marked as failed.');
     }
     if (!localClippingEnabled()) {
       await this.fail(
         id,
         'The worker is missing its local clipping configuration.'
       );
-      return;
+      throw new Error('Local clipping worker configuration is unavailable.');
     }
     const storage = new LocalStorage(process.env.UPLOAD_DIRECTORY!);
     const scratchRoot = process.env.LOCAL_CLIPPING_TMP_DIR || tmpdir();
@@ -192,7 +195,7 @@ export class LocalClippingService {
           id,
           'Local clipping needs at least 2 GiB of free scratch space. Choose a different temporary volume.'
         );
-        return;
+        throw new Error('Local clipping scratch filesystem is full.');
       }
       directory = await mkdtemp(join(scratchRoot, 'postiz-clipping-'));
       const processor = new LocalClippingProcessor(directory, signal);
@@ -206,7 +209,7 @@ export class LocalClippingService {
           id,
           'The video must contain audio and at least 20 seconds after the chosen start.'
         );
-        return;
+        throw new Error('Local clipping source is invalid.');
       }
       if (
         !(await this.repository.updateLocalClipping(id, {
@@ -214,24 +217,24 @@ export class LocalClippingService {
           duration,
         }))
       ) {
-        return;
+        throw new Error('Local clipping status changed or terminated.');
       }
       await processor.transcribe(language);
       if (
         !(await this.repository.updateLocalClipping(id, { status: 'picking' }))
       ) {
-        return;
+        throw new Error('Local clipping status changed or terminated.');
       }
       if (!(await processor.select(job.title || '', language))) {
         await this.fail(id, 'The local model did not find a complete passage.');
-        return;
+        throw new Error('The local clipping model did not select a passage.');
       }
       if (
         !(await this.repository.updateLocalClipping(id, {
           status: 'rendering',
         }))
       ) {
-        return;
+        throw new Error('Local clipping status changed or terminated.');
       }
       const rendered = await processor.render();
       // Render files live in scratch storage; uploading them must not exhaust
@@ -255,7 +258,7 @@ export class LocalClippingService {
           id,
           'Not enough free media storage to save these clips and preserve 1 GiB of free space.'
         );
-        return;
+        throw new Error('Local clipping media storage is full.');
       }
       const clips: Parameters<ClippingRepository['finishLocalClipping']>[1] =
         [];
@@ -274,6 +277,9 @@ export class LocalClippingService {
         });
       }
       committed = await this.repository.finishLocalClipping(id, clips);
+      if (!committed) {
+        throw new Error('Local clipping could not be committed.');
+      }
     } catch {
       this.logger.warn(
         `Local clipping command or persistence failed for ${id}`
@@ -282,6 +288,9 @@ export class LocalClippingService {
         id,
         'Local processing failed. Check the worker tools or try a different excerpt.'
       );
+      // Let Temporal show the failure rather than reporting a successful run
+      // for a clip that the database has marked failed.
+      throw new Error('Local clipping processing failed.');
     } finally {
       if (!committed && stagedPaths.length) {
         // A failed/retried worker can upload files without committing them.
