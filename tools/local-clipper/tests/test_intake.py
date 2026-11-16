@@ -2,7 +2,7 @@ import importlib.util
 import unittest
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location('local_intake', Path(__file__).with_name('intake.py'))
+spec = importlib.util.spec_from_file_location('local_intake', Path(__file__).resolve().parents[1] / 'intake.py')
 intake = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(intake)
 
