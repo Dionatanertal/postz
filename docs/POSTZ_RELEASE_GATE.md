@@ -114,6 +114,28 @@
 - A execução ocorreu fora do computador do usuário, sem Docker nem
   qualquer chamada de serviço paga ou publicação.
 
+## Pré-instalação do worker e testes offline (16/11/2026)
+
+- Criado o comando de diagnóstico **somente leitura**
+  `node tools/local-clipper/preflight.mjs`. Ele verifica arquivos dos
+  modelos, ferramentas de linha de comando, codecs e legendas do FFmpeg,
+  permissões dos diretórios e capacidade dos volumes de mídia e scratch.
+  Não instala nem baixa componentes e não imprime segredos.
+- Criados seis cenários simulados de pré-instalação em
+  `tools/local-clipper/tests/preflight.test.mjs`.
+- **Execução realizada fora do computador do usuário:** Node.js 22.16.0,
+  `node --experimental-strip-types --test` nos dois arquivos de testes
+  de segurança e de pré-instalação: **12 testes passaram, 0 falharam**.
+  O comando de pré-instalação também foi executado no ambiente isolado sem
+  configuração, retornando `ok: false` conforme esperado.
+- Os dois arquivos novos foram comparados por hash Git de conteúdo com o
+  remoto: `preflight.mjs` = `a59d80fb7e43321a07bb6c7a012cfd531a07b3da`,
+  `preflight.test.mjs` = `d46f8c27b8c96e99b95fd99de7b943775437bf0c`.
+- **Pendente:** executar esse comando no contêiner de release efetivo,
+  observar o Temporal, completar o build integrado e restaurar um backup
+  de banco em ambiente separado. Um resultado do preflight não prova
+  o funcionamento dos modelos ou do sistema em produção.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
