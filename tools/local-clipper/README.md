@@ -52,9 +52,13 @@ disk. For a dedicated scratch location, provision a writable, capacity-limited
 directory on a **separate mounted volume** and give the API/worker access to
 it. The configured directory must already exist. Temporary excerpts and
 transcriptions are removed after processing; clips selected for review remain
-in media storage. Do not point scratch at the host Windows `C:` drive when
-the Docker data disk there is already low on space. This protection applies
-to clipping jobs, **not Docker image builds**: control build cache separately.
+in media storage. Before saving the completed cuts, the worker checks their
+combined file size and requires enough capacity on `UPLOAD_DIRECTORY` to
+preserve **at least 1 GiB free** after copying them. Rejected cuts are still
+stored for review: this check is not a retention or cleanup policy.
+Do not point scratch at the host Windows `C:` drive when the Docker data disk
+there is already low on space. These protections apply to clipping jobs,
+**not Docker image builds**: control build cache separately.
 
 The worker needs Python 3.10+, FFmpeg with the subtitles filter and libx264,
 ffprobe, `whisper-cli` from [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
