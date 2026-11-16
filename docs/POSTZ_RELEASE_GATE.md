@@ -193,8 +193,10 @@
   nesta branch. A execução
   [43928619406](https://github.com/Dionatanertal/postz/actions/runs/43928619406)
   concluiu `success` em `280ded2`: dependências instaladas e
-  `pnpm run build` aprovado. A outra execução foi iniciada para
-  `1aebed8`, com conclusão ainda não confirmada neste registro.
+  `pnpm run build` aprovado. A segunda execução,
+  [43929398371](https://github.com/Dionatanertal/postz/actions/runs/43929398371),
+  também concluiu `success` em `1aebed8`.
+  **Ambos os builds completos passaram.**
   Para evitar novos custos não planejados, o `.github/workflows/build.yml`
   **na branch isolada** foi alterado para limitar eventos automáticos
   de `push` à branch `main`; o workflow de QA continua apenas manual.
