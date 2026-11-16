@@ -86,6 +86,44 @@ reutilização do material para nova produção**.
   orientam a próxima produção. Conversões exigem uma fonte de evento e um
   vínculo rastreável ao conteúdo.
 
+## Modo de trabalho adotado após o incidente de disco (16/11/2026)
+
+**Desenvolvimento remoto primeiro.** O GitHub pessoal `Dionatanertal/postz`
+na branch `feat/local-ai-clipping-pilot-20261115` é o lugar para registrar
+alterações e preservar o histórico. O computador do operador deixa de ser
+o ambiente de compilação recorrente. Não executar builds de imagem Docker
+ou processamento pesado de vídeo nele durante o desenvolvimento.
+
+**Limites de execução:**
+- Alterações de código e revisão podem ocorrer no GitHub, sem Docker local.
+- Não iniciar automaticamente GitHub Actions, serviços pagos, builds de
+  contêiner nem implantação por causa desta decisão. Validação remota só
+  mediante planejamento de tempo/custo e controle de artefatos e cache.
+- Nenhuma edição online comprova, por si só, que o aplicativo foi testado ou
+  está pronto para implantação. Evidências de compilação e testes devem ser
+  registradas separadamente e com o ambiente usado.
+- A instalação atual do Postiz, Docker, imagens, volumes, PostgreSQL, Redis,
+  credenciais e configurações locais permanecem protegidos.
+- O uso do Codex é opcional; se retomado, deverá evitar builds locais
+  pesados e preservar as alterações locais ainda não sincronizadas.
+
+**Sincronização segura (quando o computador tiver condições):**
+1. Antes de sincronizar o código, verificar o `git status` e preservar as
+   mudanças locais ainda não publicadas pelo Codex. A branch remota pode não
+   contê-las. Não usar `reset --hard`, `clean -fd`, `push --force` nem
+   substituir `docker-compose.yaml` ou `.env`.
+2. Reconciliar as mudanças locais e remotas sem perder trabalho; somente
+   então atualizar a cópia local da branch. `git pull` não é backup de dados.
+3. Versionar código no GitHub não copia os dados do PostgreSQL, vídeos, modelos
+   locais ou volumes Docker. Backup desses dados é uma etapa separada.
+4. Uma implantação só ocorrerá após ambiente de homologação validado, backup
+   verificável e autorização explícita, sem publicação social não autorizada.
+
+**Critério para retomar homologação:** disponibilidade de um ambiente de
+teste com recursos e espaço controlados, migrações aditivas verificadas,
+build/testes concluídos e procedimento de reversão comprovado. Não usar o
+disco C: já pressionado para tentar alcançar esse critério.
+
 ## Restrições de execução
 
 Sem deploy, migrações na instalação em uso, publicações reais ou chamadas
