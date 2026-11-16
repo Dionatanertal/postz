@@ -49,6 +49,23 @@
    próprias permissões e fontes de dados. Nenhuma destas capacidades deve
    ser apresentada como comprovada por respostas simuladas.
 
+## Correções de robustez revisadas remotamente
+
+- O contexto Docker foi restringido no `.dockerignore` para **não incorporar**
+  `tmp/`, arquivos de vídeo, pesos locais de IA, relatórios de teste,
+  arquivos `.env` nem `docker-compose*.yaml`. Este filtro reduz a chance
+  de copiar material privado e artefatos grandes para cada imagem. **Não
+  resolve por si só o cache de camadas do Docker Desktop**.
+- A tela de resultados foi corrigida para impedir que uma requisição antiga
+  substitua dados de um período mais novo após uma troca rápida entre
+  7, 30 e 90 dias.
+- As alterações foram lidas novamente no GitHub. **Não houve build, teste
+  de navegador nem alteração dos contêineres locais nesta rodada**.
+- A branch contém alterações remotas que ainda precisarão ser conciliadas
+  com os arquivos locais não enviados do Codex antes do próximo deploy.
+- Nenhuma GitHub Action foi iniciada por esta rodada, conforme consulta
+  à lista de execuções para a branch.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
