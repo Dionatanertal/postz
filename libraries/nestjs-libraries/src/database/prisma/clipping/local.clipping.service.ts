@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { createReadStream } from 'node:fs';
-import { mkdtemp, rm, statfs } from 'node:fs/promises';
+import { mkdtemp, rm, stat, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -231,10 +231,16 @@ export class LocalClippingService {
       // Render files live in scratch storage; uploading them must not exhaust
       // the persistent media volume, which also holds the user's originals.
       const mediaStats = await statfs(process.env.UPLOAD_DIRECTORY!);
-      if (mediaStats.bavail * mediaStats.bsize < 1024 * 1024 * 1024) {
+      const renderedSizes = await Promise.all(
+        rendered.map(async (clip) => (await stat(clip.file)).size)
+      );
+      const neededBytes =
+        renderedSizes.reduce((total, size) => total + size, 0) +
+        1024 * 1024 * 1024;
+      if (mediaStats.bavail * mediaStats.bsize < neededBytes) {
         await this.fail(
           id,
-          'Local clipping needs at least 1 GiB free in media storage before saving clips.'
+          'Not enough free media storage to save these clips and preserve 1 GiB of free space.'
         );
         return;
       }
