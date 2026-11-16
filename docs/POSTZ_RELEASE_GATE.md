@@ -136,6 +136,31 @@
   de banco em ambiente separado. Um resultado do preflight não prova
   o funcionamento dos modelos ou do sistema em produção.
 
+## Falhas do Temporal — tratamento e testes isolados (16/11/2026)
+
+- A atividade de clipagem não deve parecer bem-sucedida quando o serviço
+  registrou `failed` no banco. Os caminhos de falha (modelo local, mídia
+  inválida, armazenamento insuficiente, transição encerrada ou erro de
+  persistência) agora rejeitam a execução do worker e são repassados ao
+  workflow.
+- O workflow executa `runClippingWithFailureReport`: tenta persistir a
+  falha via atividade `failLocalClipping`, **sem ocultar o erro original**
+  quando a gravação do estado é bem-sucedida. Se a gravação falhar, o
+  workflow também permanece com erro.
+- Criados testes offline em
+  `tools/local-clipper/tests/local-clipping-outcome.test.mjs`.
+  **4 testes passaram, 0 falharam**, executados com Node.js 22.16.0 e
+  `--experimental-strip-types`. O helper TypeScript também passou com
+  `tsc --noEmit --skipLibCheck --strict --target ES2022 --module ESNext`.
+- Os arquivos testados foram confrontados com o conteúdo remoto via hash Git:
+  helper `3701fb16a5ecb7eb36ec942bf85f0c40e6014532`, testes
+  `7afa0caa527d261564a3c60d35d9038bfbb2eba6`.
+- **Limite da evidência:** os testes cobrem as transições das funções puras
+  com callbacks simulados. Ainda é necessário executar o workflow completo
+  no Temporal isolado, validar timeouts/cancelamentos, observar estado
+  `FAILED` no histórico e conferir a consistência do status no Prisma.
+  Não houve GitHub Action, build Docker ou publicação.
+
 ## Critério mínimo de aceite
 
 - [x] Código do MVP versionado em branch independente.
